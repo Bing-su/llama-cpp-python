@@ -842,6 +842,34 @@ async def create_chat_completion(
 
     if body.grammar is not None:
         kwargs["grammar"] = llama_cpp.LlamaGrammar.from_string(body.grammar)
+    elif body.tools or body.functions:
+        if body.tools:
+            functions = [tool["function"] for tool in body.tools]
+        else:
+            functions = body.functions
+
+        assert functions is not None and len(functions) >= 1
+
+        schema = {"type": "array"}
+        for function in functions:
+            defs = function["parameters"].get("$defs")
+            if defs and "$defs" not in schema:
+                schema["$defs"] = defs
+
+            item = {
+                "type": "object",
+                "properties": {
+                    "function": {"type": "string", "const": function["name"]},
+                    "arguments": {
+                        "type": "object",
+                        "properties": function["parameters"]["properties"],
+                    },
+                },
+            }
+            schema.setdefault("oneOf", []).append(item)
+
+        json_schema = json.dumps(schema, ensure_ascii=False)
+        kwargs["grammar"] = llama_cpp.LlamaGrammar.from_json_schema(json_schema)
 
     iterator_or_completion: Union[
         llama_cpp.ChatCompletion, Iterator[llama_cpp.ChatCompletionChunk]
