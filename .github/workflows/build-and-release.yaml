@@ -1,4 +1,12 @@
-name: Build Release
+C# !pip install llama-cpp-python
+
+from llama_cpp import Llama
+
+llm = Llama.from_pretrained(
+	repo_id="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
+	filename="Meta-Llama-3.1-8B-Instruct-IQ4_XS.gguf",
+)
+namee: Build Release
 
 on: workflow_dispatch
 
