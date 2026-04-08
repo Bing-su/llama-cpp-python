@@ -1,0 +1,65 @@
+name: Build Wheels (Vulkan)
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  build_wheels:
+    name: Build Wheel ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    container: ${{ case(startsWith(matrix.os, 'ubuntu'), format('{0}', matrix.container), null) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            repair-command: "uvx --with patchelf auditwheel repair -w wheelhouse/ dist/*.whl"
+            container: quay.io/pypa/manylinux_2_34
+          - os: ubuntu-24.04-arm
+            repair-command: "uvx --with patchelf auditwheel repair -w wheelhouse/ dist/*.whl"
+            container: quay.io/pypa/manylinux_2_39
+          - os: windows-latest
+            repair-command: "uvx delvewheel repair --analyze-existing --ignore-existing -v -w wheelhouse/ dist/*.whl"
+
+    steps:
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          dnf install -y openssl-devel
+
+      - uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+
+      - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          install_runtime: true
+
+      - name: Build wheel
+        env:
+          CMAKE_ARGS: "-DGGML_VULKAN=ON -DGGML_NATIVE=OFF"
+          CMAKE_BUILD_PARALLEL_LEVEL: "8"
+        run: uv build --wheel
+
+      - name: Repair wheel
+        run: |
+          ${{ matrix.repair-command }}
+          ls wheelhouse/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-vulkan
+          path: wheelhouse/
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: wheelhouse/*
+          tag_name: ${{ github.ref_name }}-vulkan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
